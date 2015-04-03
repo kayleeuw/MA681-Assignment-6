@@ -1,0 +1,271 @@
+---
+title: 'Bayes: MC integration to MCMC'
+output: pdf_document
+
+---
+  
+
+>  Bayesian and frequentist fundamentals
+
+> Data: $X$        Parameters: $\theta$
+
+#### Frequentist
+
+* The data are random.  The parameters are fixed.
+* ML estimation fines $\theta$ to maximize the likelihood $f(x^{n}|\theta)$
+* Probability statements cannot be made about parameters.  Instead, make statements about the performance of the estimator.
+
+
+
+#### Bayesian
+
+* Data are fixed. Parameters are random.
+* Inferences are made on the basis of the posterior $f(\theta|x^{n} )$
+* Probability statements can be made about the parameters.
+
+$f(\theta |x^{n})$
+
+*****
+######
+
+## Bayesian Basics
+
+Posterior is proportional to Likelihood times Prior  
+
+$$
+f(\theta |x^{n}) =\frac{f(x^{n}|\theta)f(\theta )}{\int f(x^{n}|\theta)f(\theta )d\theta } =\frac{\mathit{L_{n}(\theta )f(\theta )}}{c_{n}}
+$$
+
+where 
+$$
+c_{n}=\int{\mathit{L_{n}(\theta )f(\theta )}}d\theta 
+$$  
+
+
+**Prior: **       $f(\theta )$ 
+Reflects beliefs and knowledge obtained outside the analysis.
+Prior distributions my be uninformative, making the posterior distribution equal to the likelihood. Prior distributions that diverge (sum to infinity instead of 1)
+ 
+**Likelihood: **  $f(x^{n}|\theta)$ 
+contains the data, presumed iid samples.
+
+**Posterior: **   $f(\theta |x^{n})$ 
+Combines prior knowledge with data collection and analysis.
+ 
+
+
+### Conjugate Priors: 
+prior distribution $f(\theta )$ and the posterior distribution 
+$f(\theta |x^{n})$ have the same distributional form.
+
+Normal-Normal, Gamma-Normal, Beta-Binomial, Gamma-Poisson
+
+For simple problems (1 parameter and simple function), conjugate pairs yield closed form posterior distributions.
+
+You will recall:
+with $(X|\theta ) ~ Binomial(n,\theta )$  and $\theta  ~ Beta(\alpha , \beta )$
+
+$$
+f(\theta |x) \propto f(x|\theta)f(\theta)\propto Beta(\alpha + x,\beta +\alpha -x)
+$$
+
+
+
+
+
+``` {r echo=FALSE}
+
+######### 1. Unknown Probability of Success ########
+## Using built-in R pseudo-random number generator
+#theta_true <- runif(1,0,1)
+theta_true <- .45
+
+## Generate population
+N = sample(seq(100000,300000),1)
+A = round(theta_true*N)
+B = N - A
+Zpop <- sample(c(rep(1,A),rep(0,B)))
+
+
+### Pull random sample from population
+N_samp <- 200
+Zsamp <- sample(Zpop,N_samp)
+
+Y_samp <- sum(Zsamp)
+
+betaplot <- function(a,b){
+  theta = seq(0,1,0.005)
+  p_theta = dbeta(theta, a, b)
+  p <- qplot(theta, p_theta, geom='line')
+  p <- p + theme_bw()
+  p <- p + ylab(expression(paste('p(',theta,')', sep = '')))
+  p <- p + xlab(expression(theta))
+  return(p)}
+
+### Function: Prior Plot Values
+### m,n = .5,2 => a,b = 1,1 uniform
+### m,n = .5,10 => a,b = 5,5 weak equal probability
+### m,n = .5,500 => a,b 250,250 strong equal probability
+### m,n = .90,100 => a,b 90,10 medium high success
+### 
+prior <- function(m,n){
+  a = n * m
+  b = n * (1 - m)
+  dom <- seq(0,1,0.005)
+  val <- dbeta(dom,a,b)
+  return(data.frame('x'=dom, 'y'=val))
+}
+
+### Function: Likelihood Plot Values
+likelihood <- function(N,Y){
+  a <- Y + 1
+  b <- N - Y + 1
+  dom <- seq(0,1,0.005)
+  val <- dbeta(dom,a,b)
+  return(data.frame('x'=dom, 'y'=val))
+}
+
+### Function: Posterior Plot Values
+posterior <- function(m,n,N,Y){
+  a <- Y + (n*m) -1
+  b <- N - Y + (n*(1-m)) - 1
+  dom <- seq(0,1,0.005)
+  val <- dbeta(dom,a,b)
+  return(data.frame('x'=dom, 'y'=val))
+}
+
+### Function: Mean of Posterior Beta
+mean_of_posterior <- function(m,n,N,Y){
+  a <- Y + (n*m) -1
+  b <- N - Y + (n*(1-m)) - 1
+  E_posterior <- a / (a + b)
+  return(E_posterior)
+}
+
+### Function: Mode of Posterior Beta
+mode_of_posterior <- function(m,n,N,Y){
+  a <- Y + (n*m) -1
+  b <- N - Y + (n*(1-m)) - 1
+  mode_posterior <- (a-1)/(a+b-2)
+  return(mode_posterior)
+}
+
+### Function: Std Dev of Posterior Beta
+sd_of_posterior <- function(m,n,N,Y){
+  a <- Y + (n*m) -1
+  b <- N - Y + (n*(1-m)) - 1
+  sigma_posterior <- sqrt((a*b)/(((a+b)^2)*(a+b+1)))
+  return(sigma_posterior)
+}
+```
+
+Prior distributions:
+
+### m,n = .5,2 => a,b = 1,1 uniform
+
+``` {r echo=FALSE}
+m = 0.5
+n = 2
+pr <- prior(m,n)
+lk <- likelihood(N_samp,Y_samp)
+po <- posterior(m,n,N_samp,Y_samp)
+model_plot <- data.frame('Dist'=c(rep('Prior',nrow(pr)), 
+                                  rep('Likelihood',nrow(lk)), 
+                                  rep('Posterior',nrow(po))),
+                         rbind(pr,lk,po))
+with(model_plot, Dist <- factor(Dist, levels = c('Prior', 'Likelihood',
+                                                 'Posterior'), ordered = TRUE))
+mean_po <- mean_of_posterior(m,n,N_samp,Y_samp)
+mode_po <- mode_of_posterior(m,n,N_samp,Y_samp)
+sd_po <- sd_of_posterior(m,n,N_samp,Y_samp)
+
+colors <- c("red", "blue", "darkgreen")
+labels <- c("Pre-show Opinion", "Data from Show", "Planning for next show")
+
+
+plot(lk$x,lk$y,type="l",col=colors[2], ylim= c(0,15),
+     main="Combining Judgement and Results", xlab="Probability", ylab="Strength of Outcome")
+lines(pr$x,pr$y,col=colors[1])
+lines(po$x,po$y,col =colors[3])
+
+legend("topright", labels, lwd=2, lty=c(1, 1, 1), col=colors)
+
+
+```
+
+### m,n = .5,10 => a,b = 5,5 weak equal probability
+
+
+
+### m,n = .5,500 => a,b 250,250 strong equal probability
+
+
+
+### m,n = .90,100 => a,b 90,10 medium high success
+
+``` {r echo=FALSE}
+m = 0.9
+n = 100
+pr <- prior(m,n)
+lk <- likelihood(N_samp,Y_samp)
+po <- posterior(m,n,N_samp,Y_samp)
+model_plot <- data.frame('Dist'=c(rep('Prior',nrow(pr)), 
+                                  rep('Likelihood',nrow(lk)), 
+                                  rep('Posterior',nrow(po))),
+                         rbind(pr,lk,po))
+with(model_plot, Dist <- factor(Dist, levels = c('Prior', 'Likelihood',
+                                                 'Posterior'), ordered = TRUE))
+mean_po <- mean_of_posterior(m,n,N_samp,Y_samp)
+mode_po <- mode_of_posterior(m,n,N_samp,Y_samp)
+sd_po <- sd_of_posterior(m,n,N_samp,Y_samp)
+
+colors <- c("red", "blue", "darkgreen")
+labels <- c("Pre-show Opinion", "Data from Show", "Planning for next show")
+
+
+plot(lk$x,lk$y,type="l",col=colors[2], ylim= c(0,15),
+     main="Combining Judgement and Results", xlab="Probability", ylab="Strength of Outcome")
+lines(pr$x,pr$y,col=colors[1])
+lines(po$x,po$y,col =colors[3])
+
+legend("topright", labels, lwd=2, lty=c(1, 1, 1), col=colors)
+
+
+```
+
+
+
+
+
+
+### Non-conjugate Priors
+
+The non-conjugate case is much more difficult.  The issue is that the integrals by be impossible to calculated analytically.  
+
+* Normalization
+* Calculating marginal distributions
+* Calculating expected value
+
+So we use monte carlo integration.
+
+We have discussed the basic concept with a small number of parameters:  rejection sampling example, importance sampling.
+
+
+
+### MCMC
+
+Now consider the case where the issue is high dimensionality.  The approach we use is Markov Chain Monte Carlo simulation.  It is important to point out that while we will study the use of this algorithm for doing calculations with the posterior distribution of a Bayesian analysis, the issue of needing integrals of functions that cannot be analyzed is not restricted to Bayesian analysis. 
+
+The basic idea is to construct a Markov Chain whose long run distribution is one we need to fit.  The Markov Chain "explores" the high dimension space.
+
+The chain is build iteratively -- 
+
+**Metropolis-Hastings**
+
+
+
+
+
+
+
+
